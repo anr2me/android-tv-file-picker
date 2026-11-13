@@ -16,6 +16,7 @@ class MainActivity : Activity() {
     private lateinit var grant: Button
     private lateinit var adbHint: TextView
     private lateinit var testFile: Button
+    private lateinit var rootToggle: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,9 +27,18 @@ class MainActivity : Activity() {
         grant = findViewById(R.id.grant)
         adbHint = findViewById(R.id.adbHint)
         testFile = findViewById(R.id.testFile)
+        rootToggle = findViewById(R.id.rootToggle)
 
         adbHint.text = getString(R.string.permission_adb, packageName)
         grant.setOnClickListener { Storage.openAllFilesSettings(this) }
+        rootToggle.setOnClickListener {
+            if (RootAccess.isEnabled(this)) {
+                RootAccess.setEnabled(this, false)
+                refreshRootButton()
+            } else {
+                RootConsent.askEnable(this) { refreshRootButton() }
+            }
+        }
 
         testFile.setOnClickListener {
             startTest(
@@ -48,7 +58,14 @@ class MainActivity : Activity() {
         statusView.setText(if (allowed) R.string.status_on else R.string.status_off)
         grant.visibility = if (allowed) View.GONE else View.VISIBLE
         adbHint.visibility = if (allowed) View.GONE else View.VISIBLE
+        refreshRootButton()
         if (allowed) testFile.requestFocus() else grant.requestFocus()
+    }
+
+    private fun refreshRootButton() {
+        rootToggle.setText(
+            if (RootAccess.isEnabled(this)) R.string.root_toggle_on else R.string.root_toggle_off
+        )
     }
 
     private fun startTest(intent: Intent) {

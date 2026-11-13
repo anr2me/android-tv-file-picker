@@ -135,19 +135,29 @@ class PickerActivity : Activity() {
 
     private fun onEntryClick(entry: FileAdapter.Entry) {
         when (entry.kind) {
-            FileAdapter.Kind.ROOT, FileAdapter.Kind.FOLDER -> {
-                currentDir = entry.file
-                load()
-            }
+            FileAdapter.Kind.ROOT, FileAdapter.Kind.FOLDER -> openFolder(entry.file)
             FileAdapter.Kind.FILE -> {
                 if (allowMultiple) {
                     adapter.toggle(entry)
                     updateActions()
                 } else {
-                    deliver(listOf(documentUri(entry.file)))
+                    deliverChecked(listOf(entry.file), listOf(documentUri(entry.file)))
                 }
             }
         }
+    }
+
+    private fun openFolder(dir: File) {
+        if (RootAccess.isRestricted(this, dir) && !RootAccess.isEnabled(this)) {
+            // Android protects this folder. Ask the user to turn on root support.
+            RootConsent.askEnable(this) {
+                currentDir = dir
+                load()
+            }
+            return
+        }
+        currentDir = dir
+        load()
     }
 
     private fun goUp(): Boolean {
@@ -165,43 +175,67 @@ class PickerActivity : Activity() {
 
         Thread {
             var entries: List<FileAdapter.Entry> = emptyList()
-            var readable = true
+            var error: Int? = null
+            val roots = Storage.roots(this)
+
             if (dir == null) {
-                entries = Storage.roots(this).map {
-                    FileAdapter.Entry(it.dir, it.title, FileAdapter.Kind.ROOT)
+                entries = roots.map { FileAdapter.Entry(it.dir, it.title, FileAdapter.Kind.ROOT) }
+            } else if (RootAccess.isRestricted(roots, dir)) {
+                // Protected folder. Use root, if the user turned it on.
+                if (RootAccess.isEnabled(this)) {
+                    try {
+                        entries = arrange(RootAccess.list(this, dir.absolutePath).map {
+                            FileAdapter.Entry(
+                                File(dir, it.name),
+                                it.name,
+                                if (it.isDir) FileAdapter.Kind.FOLDER else FileAdapter.Kind.FILE,
+                                it.size
+                            )
+                        })
+                    } catch (e: IOException) {
+                        error = R.string.root_failed
+                    }
+                } else {
+                    error = R.string.cannot_read_restricted
                 }
             } else {
                 val children = dir.listFiles()
                 if (children == null) {
-                    readable = false
+                    error = R.string.cannot_read
                 } else {
-                    val showFiles = mode == Mode.OPEN
-                    entries = children
-                        .filter { it.isDirectory || showFiles }
-                        .filter {
-                            it.isDirectory || Storage.mimeMatches(Storage.mimeOf(it), mimeFilters)
-                        }
-                        .sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase() }))
-                        .map {
-                            FileAdapter.Entry(
-                                it,
-                                it.name,
-                                if (it.isDirectory) FileAdapter.Kind.FOLDER else FileAdapter.Kind.FILE,
-                                if (it.isFile) it.length() else 0L
-                            )
-                        }
+                    entries = arrange(children.map {
+                        // Android/data and Android/obb are folders, also if Android hides the details.
+                        val isDir = it.isDirectory || RootAccess.isRestricted(roots, it)
+                        FileAdapter.Entry(
+                            it,
+                            it.name,
+                            if (isDir) FileAdapter.Kind.FOLDER else FileAdapter.Kind.FILE,
+                            if (isDir) 0L else it.length()
+                        )
+                    })
                 }
             }
             runOnUiThread {
-                if (id == loadId && !isFinishing && !isDestroyed) show(entries, readable)
+                if (id == loadId && !isFinishing && !isDestroyed) show(entries, error)
             }
         }.start()
     }
 
-    private fun show(entries: List<FileAdapter.Entry>, readable: Boolean) {
+    /** Applies the filters of the request and sorts the entries. */
+    private fun arrange(items: List<FileAdapter.Entry>): List<FileAdapter.Entry> =
+        items
+            .filter {
+                it.kind == FileAdapter.Kind.FOLDER ||
+                    (mode == Mode.OPEN && Storage.mimeMatches(Storage.mimeOfName(it.name), mimeFilters))
+            }
+            .sortedWith(
+                compareBy<FileAdapter.Entry>({ it.kind != FileAdapter.Kind.FOLDER }, { it.name.lowercase() })
+            )
+
+    private fun show(entries: List<FileAdapter.Entry>, error: Int?) {
         adapter.submit(entries)
         emptyView.visibility = if (entries.isEmpty()) View.VISIBLE else View.GONE
-        emptyView.setText(if (readable) R.string.empty_folder else R.string.cannot_read)
+        emptyView.setText(error ?: R.string.empty_folder)
         updateActions()
 
         val target = pendingFocus?.let { adapter.indexOfPath(it) }?.takeIf { it >= 0 } ?: 0
@@ -241,8 +275,11 @@ class PickerActivity : Activity() {
 
     private fun onPrimaryClick() {
         when (mode) {
-            Mode.OPEN -> deliver(adapter.selected.map { documentUri(File(it)) })
-            Mode.TREE -> currentDir?.let { deliver(listOf(treeUri(it))) }
+            Mode.OPEN -> {
+                val files = adapter.selected.map { File(it) }
+                deliverChecked(files, files.map { documentUri(it) })
+            }
+            Mode.TREE -> currentDir?.let { deliverChecked(listOf(it), listOf(treeUri(it))) }
             Mode.CREATE -> createFile()
         }
     }
@@ -253,6 +290,10 @@ class PickerActivity : Activity() {
         if (name.isEmpty()) {
             Toast.makeText(this, R.string.file_name_empty, Toast.LENGTH_SHORT).show()
             fileName.requestFocus()
+            return
+        }
+        if (RootAccess.isRestricted(this, dir)) {
+            RootConsent.askShare(this, callerLabel()) { createProtected(dir, name) }
             return
         }
         val target = Storage.uniqueFile(dir, name)
@@ -270,11 +311,54 @@ class PickerActivity : Activity() {
         deliver(listOf(documentUri(target)))
     }
 
+    /** The document ID of a file. A file in a protected folder has the prefix "root:". */
+    private fun documentId(file: File): String =
+        (if (RootAccess.isRestricted(this, file)) RootAccess.ID_PREFIX else "") + file.absolutePath
+
     private fun documentUri(file: File): Uri =
-        DocumentsContract.buildDocumentUri(Storage.authority(this), file.absolutePath)
+        DocumentsContract.buildDocumentUri(Storage.authority(this), documentId(file))
 
     private fun treeUri(dir: File): Uri =
-        DocumentsContract.buildTreeDocumentUri(Storage.authority(this), dir.absolutePath)
+        DocumentsContract.buildTreeDocumentUri(Storage.authority(this), documentId(dir))
+
+    /** Returns the URIs. If a file is in a protected folder, the user must allow it first. */
+    private fun deliverChecked(files: List<File>, uris: List<Uri>) {
+        if (files.none { RootAccess.isRestricted(this, it) }) {
+            deliver(uris)
+        } else {
+            RootConsent.askShare(this, callerLabel()) { deliver(uris) }
+        }
+    }
+
+    /** Creates a file in a protected folder with root. Then returns the URI. */
+    private fun createProtected(dir: File, name: String) {
+        primary.isEnabled = false
+        Thread {
+            try {
+                val created = RootAccess.create(this, dir.absolutePath, name, false)
+                val id = RootAccess.ID_PREFIX + dir.absolutePath + "/" + created
+                val uri = DocumentsContract.buildDocumentUri(Storage.authority(this), id)
+                runOnUiThread { deliver(listOf(uri)) }
+            } catch (e: IOException) {
+                runOnUiThread {
+                    primary.isEnabled = true
+                    Toast.makeText(this, R.string.create_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    /** The name of the app that started the picker. */
+    private fun callerLabel(): String {
+        val packageName = callingActivity?.packageName ?: return getString(R.string.caller_unknown)
+        return try {
+            @Suppress("DEPRECATION")
+            val info = packageManager.getApplicationInfo(packageName, 0)
+            packageManager.getApplicationLabel(info).toString()
+        } catch (e: Exception) {
+            packageName
+        }
+    }
 
     private fun deliver(uris: List<Uri>) {
         if (uris.isEmpty()) return

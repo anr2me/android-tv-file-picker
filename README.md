@@ -14,6 +14,7 @@ This app solves the problem. It registers as an SAF picker and as a document pro
 |------|-------|
 | Device | Android TV 11 or newer (API level 30 or higher) |
 | Device permission | All files access (`MANAGE_EXTERNAL_STORAGE`) |
+| Root access (optional) | A rooted device. This is necessary only for [root support](#root-support-optional). |
 | Build tools | JDK 17, Android SDK 34, Gradle 8.9 |
 
 ## Supported intents
@@ -35,6 +36,7 @@ The picker supports these extras: `EXTRA_ALLOW_MULTIPLE`, `EXTRA_MIME_TYPES`, an
 2. The picker shows the folders and files on a screen that the remote control can operate.
 3. The user selects an item. The picker returns a `content://` URI to the calling app. The URI has a permission grant.
 4. The document provider (`StorageDocumentsProvider`) supplies the file data to the calling app.
+5. If you turned on [root support](#root-support-optional), the picker also opens protected folders with root.
 
 The document ID of each file is its absolute path. The provider rejects each path that is outside a storage volume.
 
@@ -92,6 +94,52 @@ In each mode, the buttons on the left side do these actions:
 | Save a file | **Save here** | Create the file with the name in the text field |
 
 If a file with the same name exists, the picker adds a number to the new name. For example, `report (1).pdf`.
+
+## Root support (optional)
+
+Android blocks access to the `Android/data` and `Android/obb` folders. This is also the case with All files access. Root support lets the picker open these protected folders on a rooted device.
+
+**Root support is off by default.** The picker does not use root until you turn it on.
+
+### Requirements for root support
+
+- A rooted device. The `su` command must be available. For example, Magisk or KernelSU.
+- Root permission for the app. The root manager asks you for this permission.
+
+### Turn root support on
+
+1. Start **Android TV File Picker** from the home screen of the TV.
+2. Select **Root support: off**.
+3. Read the warning. Select **Turn on**.
+4. If the root manager shows a request, allow it.
+
+When root access works, the button shows **Root support: on**. To turn root support off, select the button again.
+
+You can also turn root support on from the picker. Open a protected folder. The picker shows the same warning.
+
+### Consent for each share
+
+Each time you select a file or folder in a protected location, the picker shows a message. The message gives the name of the calling app. Select **Allow** to share the item. Select **Cancel** to stop. The focus is on **Cancel** at the start.
+
+### How root support works
+
+- The picker uses `su` to list, read, and write files in `Android/data` and `Android/obb`.
+- The picker uses the storage paths that Android does not filter. These are `/data/media/<user>` for internal storage and `/mnt/media_rw/<id>` for removable storage.
+- The picker examines the real path of each item before it uses the item. It rejects each path that leaves the protected folders. This includes paths through symbolic links.
+- A protected item has a document ID with the prefix `root:`. A grant for a normal folder never includes protected items. For example, a grant for a complete storage volume does not include `Android/data`.
+- A normal folder listing that another app requests does not show `Android/data` and `Android/obb`.
+- The picker supplies new files with the owner, group, and SELinux label of the parent folder.
+
+### Limits of root support
+
+- A read can use random access. A read can be slower than a normal read, because the picker uses a `su` process.
+- A write must be in sequence. The modes `w`, `wt`, and `wa` are supported. The mode `rw` is not supported.
+- The picker cannot delete or rename items in protected folders.
+- Each action starts a `su` process. A large folder can be slow to open.
+- On some devices, SELinux can deny access to a new file for the app that owns the folder. Do a test with your apps.
+
+> **WARNING**
+> Root access gives the app full control of the device. If you share a file from a protected folder, the calling app can read private data of other apps. Turn on root support only if you trust the apps that you use with the picker.
 
 ## Test the picker
 
@@ -190,6 +238,9 @@ The default package name is `com.example.androidtvfilepicker`. To change it:
 │       ├── java/.../PickerActivity.kt    The picker screen
 │       ├── java/.../FileAdapter.kt       List of storage, folders, and files
 │       ├── java/.../Storage.kt           Volumes, paths, MIME types, permission
+│       ├── java/.../RootAccess.kt        Root setting, path rules, list, create, open
+│       ├── java/.../RootShell.kt         Runs commands with su
+│       ├── java/.../RootConsent.kt       Consent dialogs for root
 │       ├── java/.../StorageDocumentsProvider.kt   The document provider
 │       └── res/                          Layouts, strings, icons
 ├── build.gradle.kts
@@ -199,7 +250,7 @@ The default package name is `com.example.androidtvfilepicker`. To change it:
 
 ## Limits
 
-- Android 11 and newer blocks access to the `Android/data` and `Android/obb` folders. The picker cannot open these folders, also with All files access.
+- Android 11 and newer blocks access to the `Android/data` and `Android/obb` folders. The picker cannot open these folders, also with All files access. On a rooted device, you can turn on [root support](#root-support-optional).
 - The app works with local storage only. It does not support cloud storage or network shares.
 - The banner on the home screen is a plain image. Replace `res/drawable/banner.xml` with your own banner (320 x 180 pixels).
 
@@ -213,6 +264,9 @@ The default package name is `com.example.androidtvfilepicker`. To change it:
 | A USB drive is not in the list | The drive is not mounted | Disconnect the drive and connect it again. Then start the picker again. |
 | The other app does not show the picker | The app does not use SAF | Use an app that supports SAF. |
 | The APK does not install | An app with the same package name and a different key is installed | Uninstall the app. Then install the APK again. |
+| The picker shows `Android protects this folder` | Root support is off | Turn on [root support](#root-support-optional). |
+| Root support does not turn on | The device has no root, or the root manager denied the app | Give root permission to the app in the root manager. Then try again. |
+| A protected file opens, but the owner app cannot read a new file | The owner or the SELinux label of the new file is not correct | Do a test with the owner app. Use the owner app to create the file, if possible. |
 
 ## Document style
 

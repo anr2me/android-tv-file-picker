@@ -20,6 +20,8 @@
     <string name="kind_folder">Folder</string>
     <string name="empty_folder">This folder is empty.</string>
     <string name="cannot_read">The app cannot read this folder.</string>
+    <string name="cannot_read_restricted">Android protects this folder. Turn on root support to open it.</string>
+    <string name="root_failed">The app cannot open this folder with root.</string>
 
     <string name="file_name_empty">Enter a file name.</string>
     <string name="create_failed">The app cannot create the file.</string>
@@ -36,4 +38,16 @@
     <string name="test_folder">Test: pick a folder</string>
     <string name="test_cancelled">The picker was cancelled.</string>
     <string name="test_result">Result:\n%1$s</string>
+
+    <string name="root_toggle_off">Root support: off</string>
+    <string name="root_toggle_on">Root support: on</string>
+    <string name="root_consent_title">Turn on root support?</string>
+    <string name="root_consent_message">Android blocks access to the Android/data and Android/obb folders. With root support, this app uses root to open these folders.\n\nA calling app can read private data of other apps if you share files from these folders. Turn on this function only if you trust the apps that you use with this picker.\n\nThe picker asks you each time that you share a protected file.</string>
+    <string name="root_consent_enable">Turn on</string>
+    <string name="root_enabled_toast">Root support is on.</string>
+    <string name="root_denied">Root access was denied, or the device has no root.</string>
+    <string name="root_share_title">Share protected files?</string>
+    <string name="root_share_message">%1$s gets access to a folder that Android protects. Allow this?</string>
+    <string name="root_share_allow">Allow</string>
+    <string name="caller_unknown">The calling app</string>
 </resources>

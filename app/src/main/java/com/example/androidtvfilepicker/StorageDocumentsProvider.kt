@@ -2,7 +2,6 @@ package com.example.androidtvfilepicker
 
 import android.database.Cursor
 import android.database.MatrixCursor
-import android.net.Uri
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
@@ -15,7 +14,11 @@ import java.io.IOException
 
 /**
  * A document provider for the storage volumes of the device.
- * The document ID of each file is its absolute path.
+ *
+ * The document ID of a normal file is its absolute path.
+ * The document ID of a file in a protected folder (Android/data, Android/obb)
+ * is "root:" and the absolute path. The provider serves these files only
+ * if the user turned on root support.
  */
 class StorageDocumentsProvider : DocumentsProvider() {
 
@@ -42,9 +45,14 @@ class StorageDocumentsProvider : DocumentsProvider() {
 
     override fun queryDocument(documentId: String, projection: Array<out String>?): Cursor {
         val ctx = context ?: throw FileNotFoundException("No context")
+        val result = MatrixCursor(projection ?: DEFAULT_DOCUMENT_PROJECTION)
+        if (isRootId(documentId)) {
+            val path = pathOf(documentId)
+            includeRootEntry(result, path, rootCall { RootAccess.stat(ctx, path) })
+            return result
+        }
         val file = Storage.resolve(ctx, documentId)
         if (!file.exists()) throw FileNotFoundException("Not found: $documentId")
-        val result = MatrixCursor(projection ?: DEFAULT_DOCUMENT_PROJECTION)
         includeFile(result, file, Storage.roots(ctx))
         return result
     }
@@ -55,13 +63,22 @@ class StorageDocumentsProvider : DocumentsProvider() {
         sortOrder: String?
     ): Cursor {
         val ctx = context ?: throw FileNotFoundException("No context")
-        val parent = Storage.resolve(ctx, parentDocumentId)
-        if (!parent.isDirectory) throw FileNotFoundException("Not a folder: $parentDocumentId")
         val result = MatrixCursor(projection ?: DEFAULT_DOCUMENT_PROJECTION)
-        val roots = Storage.roots(ctx)
-        parent.listFiles()
-            ?.sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase() }))
-            ?.forEach { includeFile(result, it, roots) }
+        if (isRootId(parentDocumentId)) {
+            val parentPath = pathOf(parentDocumentId)
+            rootCall { RootAccess.list(ctx, parentPath) }
+                .sortedWith(compareBy<RootAccess.Entry>({ !it.isDir }, { it.name.lowercase() }))
+                .forEach { includeRootEntry(result, "$parentPath/${it.name}", it) }
+        } else {
+            val parent = Storage.resolve(ctx, parentDocumentId)
+            if (!parent.isDirectory) throw FileNotFoundException("Not a folder: $parentDocumentId")
+            val roots = Storage.roots(ctx)
+            // Protected folders are not in a normal listing.
+            parent.listFiles()
+                ?.filterNot { RootAccess.isRestricted(roots, it) }
+                ?.sortedWith(compareBy<File>({ !it.isDirectory }, { it.name.lowercase() }))
+                ?.forEach { includeFile(result, it, roots) }
+        }
         result.setNotificationUri(
             ctx.contentResolver,
             DocumentsContract.buildChildDocumentsUri(Storage.authority(ctx), parentDocumentId)
@@ -75,6 +92,9 @@ class StorageDocumentsProvider : DocumentsProvider() {
         signal: CancellationSignal?
     ): ParcelFileDescriptor {
         val ctx = context ?: throw FileNotFoundException("No context")
+        if (isRootId(documentId)) {
+            return rootCall { RootAccess.open(ctx, pathOf(documentId), mode) }
+        }
         val file = Storage.resolve(ctx, documentId)
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.parseMode(mode))
     }
@@ -85,6 +105,14 @@ class StorageDocumentsProvider : DocumentsProvider() {
         displayName: String
     ): String {
         val ctx = context ?: throw FileNotFoundException("No context")
+        if (isRootId(parentDocumentId)) {
+            val parentPath = pathOf(parentDocumentId)
+            val name = rootCall {
+                RootAccess.create(ctx, parentPath, displayName, mimeType == Document.MIME_TYPE_DIR)
+            }
+            notifyChildren(parentDocumentId)
+            return RootAccess.ID_PREFIX + parentPath + "/" + name
+        }
         val parent = Storage.resolve(ctx, parentDocumentId)
         if (!parent.isDirectory || !parent.canWrite()) {
             throw FileNotFoundException("Cannot write to: $parentDocumentId")
@@ -102,6 +130,9 @@ class StorageDocumentsProvider : DocumentsProvider() {
 
     override fun deleteDocument(documentId: String) {
         val ctx = context ?: throw FileNotFoundException("No context")
+        if (isRootId(documentId)) {
+            throw FileNotFoundException("Delete is not supported in protected folders")
+        }
         val file = Storage.resolve(ctx, documentId)
         if (Storage.isRoot(ctx, file)) throw FileNotFoundException("Cannot delete a storage root")
         if (!file.deleteRecursively()) throw FileNotFoundException("Cannot delete: $documentId")
@@ -110,6 +141,9 @@ class StorageDocumentsProvider : DocumentsProvider() {
 
     override fun renameDocument(documentId: String, displayName: String): String {
         val ctx = context ?: throw FileNotFoundException("No context")
+        if (isRootId(documentId)) {
+            throw FileNotFoundException("Rename is not supported in protected folders")
+        }
         val file = Storage.resolve(ctx, documentId)
         if (Storage.isRoot(ctx, file)) throw FileNotFoundException("Cannot rename a storage root")
         val parent = file.parentFile ?: throw FileNotFoundException("No parent folder")
@@ -121,8 +155,31 @@ class StorageDocumentsProvider : DocumentsProvider() {
         return target.absolutePath
     }
 
-    override fun isChildDocument(parentDocumentId: String, documentId: String): Boolean =
-        Storage.isDescendant(File(parentDocumentId), File(documentId))
+    override fun isChildDocument(parentDocumentId: String, documentId: String): Boolean {
+        val parentIsRoot = isRootId(parentDocumentId)
+        // A normal grant never includes a protected document, and the reverse.
+        if (parentIsRoot != isRootId(documentId)) return false
+        val parent = pathOf(parentDocumentId)
+        val child = pathOf(documentId)
+        if (parentIsRoot) {
+            return RootAccess.isCleanPath(parent) && RootAccess.isCleanPath(child) &&
+                child.startsWith("$parent/")
+        }
+        return Storage.isDescendant(File(parent), File(child))
+    }
+
+    private fun isRootId(documentId: String): Boolean = documentId.startsWith(RootAccess.ID_PREFIX)
+
+    private fun pathOf(documentId: String): String = documentId.removePrefix(RootAccess.ID_PREFIX)
+
+    private inline fun <T> rootCall(block: () -> T): T =
+        try {
+            block()
+        } catch (e: FileNotFoundException) {
+            throw e
+        } catch (e: IOException) {
+            throw FileNotFoundException(e.message ?: "Root access failed")
+        }
 
     private fun notifyChildren(parentDocumentId: String) {
         val ctx = context ?: return
@@ -130,6 +187,23 @@ class StorageDocumentsProvider : DocumentsProvider() {
             DocumentsContract.buildChildDocumentsUri(Storage.authority(ctx), parentDocumentId),
             null
         )
+    }
+
+    private fun includeRootEntry(cursor: MatrixCursor, path: String, entry: RootAccess.Entry) {
+        cursor.newRow().apply {
+            add(Document.COLUMN_DOCUMENT_ID, RootAccess.ID_PREFIX + path)
+            add(Document.COLUMN_DISPLAY_NAME, entry.name)
+            add(Document.COLUMN_SIZE, if (entry.isDir) null else entry.size)
+            add(
+                Document.COLUMN_MIME_TYPE,
+                if (entry.isDir) Document.MIME_TYPE_DIR else Storage.mimeOfName(entry.name)
+            )
+            add(Document.COLUMN_LAST_MODIFIED, entry.modified)
+            add(
+                Document.COLUMN_FLAGS,
+                if (entry.isDir) Document.FLAG_DIR_SUPPORTS_CREATE else Document.FLAG_SUPPORTS_WRITE
+            )
+        }
     }
 
     private fun includeFile(cursor: MatrixCursor, file: File, roots: List<Storage.Root>) {

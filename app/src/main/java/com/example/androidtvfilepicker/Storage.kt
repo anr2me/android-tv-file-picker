@@ -93,19 +93,27 @@ object Storage {
         }
     }
 
-    /** Converts a document ID to a file. Fails if the file is outside the storage volumes. */
+    /**
+     * Converts a document ID to a file. Fails if the file is outside the storage volumes.
+     * Also fails for protected folders. Only the "root:" document IDs give access to them.
+     */
     @Throws(FileNotFoundException::class)
     fun resolve(context: Context, documentId: String): File {
         val file = File(documentId)
-        if (!isInsideStorage(context, file)) {
-            throw FileNotFoundException("Not inside a storage volume: $documentId")
+        if (!isInsideStorage(context, file) || RootAccess.isRestricted(context, file)) {
+            throw FileNotFoundException("Not available: $documentId")
         }
         return file
     }
 
     fun mimeOf(file: File): String {
         if (file.isDirectory) return Document.MIME_TYPE_DIR
-        val extension = file.extension.lowercase()
+        return mimeOfName(file.name)
+    }
+
+    /** Returns the MIME type from the extension of a file name. */
+    fun mimeOfName(name: String): String {
+        val extension = name.substringAfterLast('.', "").lowercase()
         return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
             ?: "application/octet-stream"
     }
