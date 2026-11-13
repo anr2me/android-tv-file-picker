@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Android TV File Picker</string>
+
+    <string name="title_open_file">Select a file</string>
+    <string name="title_open_files">Select files</string>
+    <string name="title_open_folder">Select a folder</string>
+    <string name="title_save_file">Save a file</string>
+
+    <string name="hint_navigate">Press Back to go up one folder.</string>
+    <string name="hint_file_name">File name</string>
+
+    <string name="action_use_folder">Use this folder</string>
+    <string name="action_save_here">Save here</string>
+    <string name="action_select_count">Select (%1$d)</string>
+    <string name="action_cancel">Cancel</string>
+
+    <string name="storage_roots">Storage</string>
+    <string name="kind_storage">Storage</string>
+    <string name="kind_folder">Folder</string>
+    <string name="empty_folder">This folder is empty.</string>
+    <string name="cannot_read">The app cannot read this folder.</string>
+
+    <string name="file_name_empty">Enter a file name.</string>
+    <string name="create_failed">The app cannot create the file.</string>
+
+    <string name="permission_title">All files access is off</string>
+    <string name="permission_message">The picker needs the All files access permission. Open the settings and turn the permission on.</string>
+    <string name="permission_button">Open settings</string>
+    <string name="permission_adb">If the settings screen does not open, connect with ADB and run:\nadb shell appops set %1$s MANAGE_EXTERNAL_STORAGE allow</string>
+
+    <string name="main_description">This app is a file and folder picker for apps that use the Storage Access Framework. Give the app All files access, then start any app that opens or saves files.</string>
+    <string name="status_on">All files access: on</string>
+    <string name="status_off">All files access: off</string>
+    <string name="test_file">Test: pick a file</string>
+    <string name="test_folder">Test: pick a folder</string>
+    <string name="test_cancelled">The picker was cancelled.</string>
+    <string name="test_result">Result:\n%1$s</string>
+</resources>
