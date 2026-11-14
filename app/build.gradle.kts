@@ -35,8 +35,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // The SMB library (smbj) and its dependencies use reflection.
+            // The build does not shrink the code, so the release build is safe.
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -62,8 +64,25 @@ android {
     lint {
         abortOnError = false
     }
+
+    packaging {
+        resources {
+            // Libraries for the network shares have files with the same path.
+            excludes += setOf(
+                "META-INF/versions/**",
+                "META-INF/DEPENDENCIES",
+                "META-INF/INDEX.LIST",
+                "META-INF/LICENSE*",
+                "META-INF/NOTICE*"
+            )
+        }
+    }
 }
 
 dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+
+    // Network shares
+    implementation("com.hierynomus:smbj:0.13.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }

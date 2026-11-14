@@ -135,7 +135,8 @@ class PickerActivity : Activity() {
 
     private fun onEntryClick(entry: FileAdapter.Entry) {
         when (entry.kind) {
-            FileAdapter.Kind.ROOT, FileAdapter.Kind.FOLDER -> openFolder(entry.file)
+            FileAdapter.Kind.ROOT, FileAdapter.Kind.NETWORK, FileAdapter.Kind.FOLDER ->
+                openFolder(entry.file)
             FileAdapter.Kind.FILE -> {
                 if (allowMultiple) {
                     adapter.toggle(entry)
@@ -163,7 +164,7 @@ class PickerActivity : Activity() {
     private fun goUp(): Boolean {
         val dir = currentDir ?: return false
         pendingFocus = dir.absolutePath
-        currentDir = if (Storage.isRoot(this, dir)) null else dir.parentFile
+        currentDir = if (Storage.isRoot(this, dir) || NetAccess.isShareRoot(dir)) null else dir.parentFile
         load()
         return true
     }
@@ -171,7 +172,11 @@ class PickerActivity : Activity() {
     private fun load() {
         val dir = currentDir
         val id = ++loadId
-        pathView.text = dir?.absolutePath ?: getString(R.string.storage_roots)
+        pathView.text = when {
+            dir == null -> getString(R.string.storage_roots)
+            NetAccess.isVirtual(dir) -> NetAccess.displayPath(this, dir)
+            else -> dir.absolutePath
+        }
 
         Thread {
             var entries: List<FileAdapter.Entry> = emptyList()
@@ -179,7 +184,29 @@ class PickerActivity : Activity() {
             val roots = Storage.roots(this)
 
             if (dir == null) {
-                entries = roots.map { FileAdapter.Entry(it.dir, it.title, FileAdapter.Kind.ROOT) }
+                entries = roots.map { FileAdapter.Entry(it.dir, it.title, FileAdapter.Kind.ROOT) } +
+                    Shares.list(this).map {
+                        FileAdapter.Entry(NetAccess.virtualFile(it.id), it.name, FileAdapter.Kind.NETWORK)
+                    }
+            } else if (NetAccess.isVirtual(dir)) {
+                // A folder on a network share.
+                val target = NetAccess.fromVirtual(dir)
+                if (target == null) {
+                    error = R.string.net_failed
+                } else {
+                    try {
+                        entries = arrange(NetAccess.list(this, target.shareId, target.path).map {
+                            FileAdapter.Entry(
+                                File(dir, it.name),
+                                it.name,
+                                if (it.isDir) FileAdapter.Kind.FOLDER else FileAdapter.Kind.FILE,
+                                it.size
+                            )
+                        })
+                    } catch (e: IOException) {
+                        error = R.string.net_failed
+                    }
+                }
             } else if (RootAccess.isRestricted(roots, dir)) {
                 // Protected folder. Use root, if the user turned it on.
                 if (RootAccess.isEnabled(this)) {
@@ -292,6 +319,10 @@ class PickerActivity : Activity() {
             fileName.requestFocus()
             return
         }
+        if (NetAccess.isVirtual(dir)) {
+            createOnShare(dir, name)
+            return
+        }
         if (RootAccess.isRestricted(this, dir)) {
             RootConsent.askShare(this, callerLabel()) { createProtected(dir, name) }
             return
@@ -312,8 +343,11 @@ class PickerActivity : Activity() {
     }
 
     /** The document ID of a file. A file in a protected folder has the prefix "root:". */
-    private fun documentId(file: File): String =
-        (if (RootAccess.isRestricted(this, file)) RootAccess.ID_PREFIX else "") + file.absolutePath
+    private fun documentId(file: File): String {
+        // A file on a network share has the ID of the share and the path on the share.
+        NetAccess.fromVirtual(file)?.let { return NetAccess.documentId(it.shareId, it.path) }
+        return (if (RootAccess.isRestricted(this, file)) RootAccess.ID_PREFIX else "") + file.absolutePath
+    }
 
     private fun documentUri(file: File): Uri =
         DocumentsContract.buildDocumentUri(Storage.authority(this), documentId(file))
@@ -328,6 +362,29 @@ class PickerActivity : Activity() {
         } else {
             RootConsent.askShare(this, callerLabel()) { deliver(uris) }
         }
+    }
+
+    /** Creates a file on a network share. Then returns the URI. */
+    private fun createOnShare(dir: File, name: String) {
+        val target = NetAccess.fromVirtual(dir) ?: return
+        if (Shares.get(this, target.shareId)?.readOnly == true) {
+            Toast.makeText(this, R.string.net_read_only, Toast.LENGTH_LONG).show()
+            return
+        }
+        primary.isEnabled = false
+        Thread {
+            try {
+                val created = NetAccess.create(this, target.shareId, target.path, name, false)
+                val id = NetAccess.documentId(target.shareId, NetAccess.child(target.path, created))
+                val uri = DocumentsContract.buildDocumentUri(Storage.authority(this), id)
+                runOnUiThread { deliver(listOf(uri)) }
+            } catch (e: IOException) {
+                runOnUiThread {
+                    primary.isEnabled = true
+                    Toast.makeText(this, R.string.create_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
 
     /** Creates a file in a protected folder with root. Then returns the URI. */

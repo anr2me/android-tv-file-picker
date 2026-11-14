@@ -15,6 +15,7 @@ This app solves the problem. It registers as an SAF picker and as a document pro
 | Device | Android TV 11 or newer (API level 30 or higher) |
 | Device permission | All files access (`MANAGE_EXTERNAL_STORAGE`) |
 | Root access (optional) | A rooted device. This is necessary only for [root support](#root-support-optional). |
+| Network (optional) | An SMB 2/3 server or a WebDAV server. This is necessary only for [network shares](#network-shares-smb-and-webdav). |
 | Build tools | JDK 17, Android SDK 34, Gradle 8.9 |
 
 ## Supported intents
@@ -37,6 +38,7 @@ The picker supports these extras: `EXTRA_ALLOW_MULTIPLE`, `EXTRA_MIME_TYPES`, an
 3. The user selects an item. The picker returns a `content://` URI to the calling app. The URI has a permission grant.
 4. The document provider (`StorageDocumentsProvider`) supplies the file data to the calling app.
 5. If you turned on [root support](#root-support-optional), the picker also opens protected folders with root.
+6. If you added [network shares](#network-shares-smb-and-webdav), the picker also shows them. The provider reads and writes the files on the server.
 
 The document ID of each file is its absolute path. The provider rejects each path that is outside a storage volume.
 
@@ -143,6 +145,64 @@ Each time you select a file or folder in a protected location, the picker shows 
 > **WARNING**
 > Root access gives the app full control of the device. If you share a file from a protected folder, the calling app can read private data of other apps. Turn on root support only if you trust the apps that you use with the picker.
 
+## Network shares (SMB and WebDAV)
+
+The picker can open files on a network share. A calling app then gets access to the movies, music, game ROMs, and other files on a NAS or a computer.
+
+### Supported protocols
+
+| Protocol | Notes |
+|----------|-------|
+| SMB | SMB 2 and SMB 3. SMB 1 is not supported. Sign-in with user name and password, or as a guest. |
+| WebDAV | HTTP and HTTPS. Basic authentication only. The server must support HTTP range requests. |
+
+### Add a share
+
+1. Start **Android TV File Picker** from the home screen of the TV.
+2. Select **Network shares**.
+3. Select **Add SMB share** or **Add WebDAV share**.
+4. Enter the values from the table below.
+5. Select **Test**. The app shows if the connection works.
+6. Select **Save**.
+
+| Field | Description |
+|-------|-------------|
+| Name | The name that the picker shows. If empty, the picker shows the address. |
+| Server (SMB) | The name or the IP address of the server. For a port that is not 445, use `host:port`. |
+| URL (WebDAV) | The URL of the WebDAV folder, for example `https://nas.local/dav`. |
+| Share name (SMB) | The name of the share on the server. |
+| Folder (SMB) | A folder in the share, for example `Media/Movies`. This is optional. |
+| User name | The user name. If empty, the app uses a guest login. |
+| Password | The password. If you change a share, an empty field keeps the old password. |
+| Domain (SMB) | The domain of the user. This is optional. |
+| Read-only | If on, the calling apps cannot write, create, delete, or rename. |
+| Trust all certificates (WebDAV) | If on, the app accepts each TLS certificate. This is not safe. |
+
+To change or delete a share, select it in the list.
+
+### Use a share
+
+The picker shows each share after the storage volumes in the top-level list. Select the share. Then select a folder or a file. The calling app gets access to the item, and not to the rest of the share.
+
+### Safety of network shares
+
+- A new share is **read-only**. Turn this off only if an app must write to the share.
+- The app encrypts each password with a key in the Android Keystore. The app does not include the passwords in a backup.
+- A document ID for a share has the prefix `net:` and the ID of the share. A grant for one share never includes another share, local storage, or a protected folder.
+- The app rejects each path with `..` or a backslash.
+- HTTP sends a Basic password without encryption. Use HTTPS if possible. The editor shows a warning for an HTTP URL.
+- Use **Trust all certificates** only in a network that you trust. The option applies to one share.
+
+### Limits of network shares
+
+- A read can use random access. The picker reads blocks of 1 MiB. A slow network limits the speed of large files.
+- An SMB share supports the modes `r`, `w`, `wt`, `wa`, `rw`, and `rwt`. A WebDAV share supports `r`, `w`, and `wt`. A WebDAV write must be in sequence.
+- A WebDAV write is one HTTP request. If the request fails, the calling app can get the error after it closes the file, or it cannot get the error.
+- Apps that need a file path, for example some emulators, cannot use a network share. They must support SAF or file descriptors.
+- WebDAV supports only Basic authentication. A server that needs Digest authentication does not work.
+- The app does not find servers automatically. It does not support NFS, FTP, or SFTP.
+- The app keeps the connection of a share open. If the server closes the connection, the app connects again.
+
 ## Test the picker
 
 The start screen has two test buttons: **Test: pick a file** and **Test: pick a folder**. Each button starts the picker and shows the URI that the picker returns.
@@ -243,6 +303,13 @@ The default package name is `com.example.androidtvfilepicker`. To change it:
 │       ├── java/.../RootAccess.kt        Root setting, path rules, list, create, open
 │       ├── java/.../RootShell.kt         Runs commands with su
 │       ├── java/.../RootConsent.kt       Consent dialogs for root
+│       ├── java/.../NetAccess.kt         Network shares: IDs, paths, open, create
+│       ├── java/.../RemoteClient.kt      Interface of a client, and the client cache
+│       ├── java/.../SmbRemoteClient.kt   SMB client (smbj)
+│       ├── java/.../WebDavRemoteClient.kt   WebDAV client (OkHttp)
+│       ├── java/.../Shares.kt            The list of shares
+│       ├── java/.../Secret.kt            Password encryption (Android Keystore)
+│       ├── java/.../SharesActivity.kt    The screen for the shares
 │       ├── java/.../StorageDocumentsProvider.kt   The document provider
 │       └── res/                          Layouts, strings, icons
 ├── build.gradle.kts
@@ -253,7 +320,8 @@ The default package name is `com.example.androidtvfilepicker`. To change it:
 ## Limits
 
 - Android 11 and newer blocks access to the `Android/data` and `Android/obb` folders. The picker cannot open these folders, also with All files access. On a rooted device, you can turn on [root support](#root-support-optional).
-- The app works with local storage only. It does not support cloud storage or network shares.
+- The app supports local storage, SMB shares, and WebDAV shares. It does not support cloud storage, NFS, FTP, or SFTP.
+- The release build does not shrink the code. The libraries for the network shares use reflection. The APK is therefore larger.
 - The banner on the home screen is a plain image. Replace `res/drawable/banner.xml` with your own banner (320 x 180 pixels).
 
 ## Troubleshooting
@@ -266,6 +334,11 @@ The default package name is `com.example.androidtvfilepicker`. To change it:
 | A USB drive is not in the list | The drive is not mounted | Disconnect the drive and connect it again. Then start the picker again. |
 | The other app does not show the picker | The app does not use SAF | Use an app that supports SAF. |
 | The APK does not install | An app with the same package name and a different key is installed | Uninstall the app. Then install the APK again. |
+| The test of an SMB share shows `STATUS_LOGON_FAILURE` | The user name, password, or domain is not correct | Correct the values. Then do the test again. |
+| The test of an SMB share shows a connection error | The server is off, the address is not correct, or a firewall blocks port 445 | Examine the address and the network. The server must support SMB 2 or SMB 3. |
+| The test of a WebDAV share shows `Access denied (HTTP 401)` | The password is not correct, or the server needs Digest authentication | Correct the password. Change the server to Basic authentication over HTTPS. |
+| The test of a WebDAV share shows a certificate error | The server uses a certificate that Android does not trust | Install a trusted certificate on the server. Or turn on **Trust all certificates** for a network that you trust. |
+| A calling app cannot play or open a file from a share | The app needs a file path, or the WebDAV server does not support range requests | Use an app that supports SAF. Turn on range requests on the server. |
 | The picker shows `Android protects this folder` | Root support is off | Turn on [root support](#root-support-optional). |
 | Root support does not turn on | The device has no root, or the root manager denied the app | Give root permission to the app in the root manager. Then try again. |
 | A protected file opens, but the owner app cannot read a new file | The owner or the SELinux label of the new file is not correct | Do a test with the owner app. Use the owner app to create the file, if possible. |

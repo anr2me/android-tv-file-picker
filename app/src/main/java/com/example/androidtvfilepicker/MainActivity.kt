@@ -47,6 +47,9 @@ class MainActivity : Activity() {
                     .setType("*/*")
             )
         }
+        findViewById<Button>(R.id.sharesButton).setOnClickListener {
+            startActivity(Intent(this, SharesActivity::class.java))
+        }
         findViewById<Button>(R.id.testFolder).setOnClickListener {
             startTest(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE))
         }

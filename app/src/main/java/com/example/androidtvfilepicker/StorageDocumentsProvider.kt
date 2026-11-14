@@ -19,6 +19,8 @@ import java.io.IOException
  * The document ID of a file in a protected folder (Android/data, Android/obb)
  * is "root:" and the absolute path. The provider serves these files only
  * if the user turned on root support.
+ * The document ID of an item on a network share is "net:", the ID of the share,
+ * ":", and the path on the share. Refer to [NetAccess].
  */
 class StorageDocumentsProvider : DocumentsProvider() {
 
@@ -40,12 +42,31 @@ class StorageDocumentsProvider : DocumentsProvider() {
                 add(Root.COLUMN_AVAILABLE_BYTES, root.dir.freeSpace)
             }
         }
+        for (share in Shares.list(ctx)) {
+            result.newRow().apply {
+                add(Root.COLUMN_ROOT_ID, NetAccess.rootId(share.id))
+                add(Root.COLUMN_DOCUMENT_ID, NetAccess.documentId(share.id, "/"))
+                add(Root.COLUMN_TITLE, share.name)
+                add(
+                    Root.COLUMN_FLAGS,
+                    Root.FLAG_SUPPORTS_IS_CHILD or
+                        (if (share.readOnly) 0 else Root.FLAG_SUPPORTS_CREATE)
+                )
+                add(Root.COLUMN_ICON, R.drawable.ic_network)
+            }
+        }
         return result
     }
 
     override fun queryDocument(documentId: String, projection: Array<out String>?): Cursor {
         val ctx = context ?: throw FileNotFoundException("No context")
         val result = MatrixCursor(projection ?: DEFAULT_DOCUMENT_PROJECTION)
+        NetAccess.parse(documentId)?.let { target ->
+            val share = netCall { NetAccess.share(ctx, target.shareId) }
+            val entry = netCall { NetAccess.stat(ctx, target.shareId, target.path) }
+            includeNetEntry(result, target, entry, share, target.path == "/")
+            return result
+        }
         if (isRootId(documentId)) {
             val path = pathOf(documentId)
             val entry = rootCall { RootAccess.stat(ctx, path) }
@@ -67,7 +88,16 @@ class StorageDocumentsProvider : DocumentsProvider() {
     ): Cursor {
         val ctx = context ?: throw FileNotFoundException("No context")
         val result = MatrixCursor(projection ?: DEFAULT_DOCUMENT_PROJECTION)
-        if (isRootId(parentDocumentId)) {
+        val net = NetAccess.parse(parentDocumentId)
+        if (net != null) {
+            val share = netCall { NetAccess.share(ctx, net.shareId) }
+            netCall { NetAccess.list(ctx, net.shareId, net.path) }
+                .sortedWith(compareBy<RemoteEntry>({ !it.isDir }, { it.name.lowercase() }))
+                .forEach {
+                    val target = NetAccess.Target(net.shareId, NetAccess.child(net.path, it.name))
+                    includeNetEntry(result, target, it, share, false)
+                }
+        } else if (isRootId(parentDocumentId)) {
             val parentPath = pathOf(parentDocumentId)
             rootCall { RootAccess.list(ctx, parentPath) }
                 .sortedWith(compareBy<RootAccess.Entry>({ !it.isDir }, { it.name.lowercase() }))
@@ -95,6 +125,9 @@ class StorageDocumentsProvider : DocumentsProvider() {
         signal: CancellationSignal?
     ): ParcelFileDescriptor {
         val ctx = context ?: throw FileNotFoundException("No context")
+        NetAccess.parse(documentId)?.let { target ->
+            return netCall { NetAccess.open(ctx, target.shareId, target.path, mode) }
+        }
         if (isRootId(documentId)) {
             return rootCall { RootAccess.open(ctx, pathOf(documentId), mode) }
         }
@@ -108,6 +141,19 @@ class StorageDocumentsProvider : DocumentsProvider() {
         displayName: String
     ): String {
         val ctx = context ?: throw FileNotFoundException("No context")
+        NetAccess.parse(parentDocumentId)?.let { target ->
+            val name = netCall {
+                NetAccess.create(
+                    ctx,
+                    target.shareId,
+                    target.path,
+                    displayName,
+                    mimeType == Document.MIME_TYPE_DIR
+                )
+            }
+            notifyChildren(parentDocumentId)
+            return NetAccess.documentId(target.shareId, NetAccess.child(target.path, name))
+        }
         if (isRootId(parentDocumentId)) {
             val parentPath = pathOf(parentDocumentId)
             val name = rootCall {
@@ -133,6 +179,11 @@ class StorageDocumentsProvider : DocumentsProvider() {
 
     override fun deleteDocument(documentId: String) {
         val ctx = context ?: throw FileNotFoundException("No context")
+        NetAccess.parse(documentId)?.let { target ->
+            netCall { NetAccess.delete(ctx, target.shareId, target.path) }
+            notifyChildren(NetAccess.documentId(target.shareId, NetAccess.parentPath(target.path)))
+            return
+        }
         if (isRootId(documentId)) {
             throw FileNotFoundException("Delete is not supported in protected folders")
         }
@@ -144,6 +195,12 @@ class StorageDocumentsProvider : DocumentsProvider() {
 
     override fun renameDocument(documentId: String, displayName: String): String {
         val ctx = context ?: throw FileNotFoundException("No context")
+        NetAccess.parse(documentId)?.let { target ->
+            val newName = netCall { NetAccess.rename(ctx, target.shareId, target.path, displayName) }
+            val parent = NetAccess.parentPath(target.path)
+            notifyChildren(NetAccess.documentId(target.shareId, parent))
+            return NetAccess.documentId(target.shareId, NetAccess.child(parent, newName))
+        }
         if (isRootId(documentId)) {
             val path = pathOf(documentId)
             val newName = rootCall { RootAccess.rename(ctx, path, displayName) }
@@ -163,6 +220,14 @@ class StorageDocumentsProvider : DocumentsProvider() {
     }
 
     override fun isChildDocument(parentDocumentId: String, documentId: String): Boolean {
+        // A grant for a share never includes another share, local storage, or a protected folder.
+        val parentNet = NetAccess.parse(parentDocumentId)
+        val childNet = NetAccess.parse(documentId)
+        if (parentNet != null || childNet != null) {
+            return parentNet != null && childNet != null &&
+                parentNet.shareId == childNet.shareId &&
+                NetAccess.isInside(parentNet.path, childNet.path)
+        }
         val parentIsRoot = isRootId(parentDocumentId)
         // A normal grant never includes a protected document, and the reverse.
         if (parentIsRoot != isRootId(documentId)) return false
@@ -188,12 +253,48 @@ class StorageDocumentsProvider : DocumentsProvider() {
             throw FileNotFoundException(e.message ?: "Root access failed")
         }
 
+    private inline fun <T> netCall(block: () -> T): T =
+        try {
+            block()
+        } catch (e: FileNotFoundException) {
+            throw e
+        } catch (e: IOException) {
+            throw FileNotFoundException(e.message ?: "Network error")
+        }
+
     private fun notifyChildren(parentDocumentId: String) {
         val ctx = context ?: return
         ctx.contentResolver.notifyChange(
             DocumentsContract.buildChildDocumentsUri(Storage.authority(ctx), parentDocumentId),
             null
         )
+    }
+
+    private fun includeNetEntry(
+        cursor: MatrixCursor,
+        target: NetAccess.Target,
+        entry: RemoteEntry,
+        share: NetShare,
+        isShareRoot: Boolean
+    ) {
+        var flags = 0
+        if (!share.readOnly) {
+            flags = if (entry.isDir) Document.FLAG_DIR_SUPPORTS_CREATE else Document.FLAG_SUPPORTS_WRITE
+            if (target.path != "/") {
+                flags = flags or Document.FLAG_SUPPORTS_DELETE or Document.FLAG_SUPPORTS_RENAME
+            }
+        }
+        cursor.newRow().apply {
+            add(Document.COLUMN_DOCUMENT_ID, NetAccess.documentId(target.shareId, target.path))
+            add(Document.COLUMN_DISPLAY_NAME, if (isShareRoot) share.name else entry.name)
+            add(Document.COLUMN_SIZE, if (entry.isDir) null else entry.size)
+            add(
+                Document.COLUMN_MIME_TYPE,
+                if (entry.isDir) Document.MIME_TYPE_DIR else Storage.mimeOfName(entry.name)
+            )
+            add(Document.COLUMN_LAST_MODIFIED, entry.modified)
+            add(Document.COLUMN_FLAGS, flags)
+        }
     }
 
     private fun includeRootEntry(
