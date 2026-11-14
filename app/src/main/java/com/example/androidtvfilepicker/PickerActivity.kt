@@ -428,6 +428,13 @@ class PickerActivity : Activity() {
             )
         var flags = requested or Intent.FLAG_GRANT_READ_URI_PERMISSION
         if (mode != Mode.OPEN) flags = flags or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        // The system picker makes each grant persistable, also if the app did not ask for it.
+        // Many apps call takePersistableUriPermission without this flag in the request.
+        // Without the flag, such a call throws a SecurityException and the app crashes.
+        // The result of GET_CONTENT is not persistable.
+        if (intent.action != Intent.ACTION_GET_CONTENT) {
+            flags = flags or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        }
 
         val result = Intent()
         result.addFlags(flags)
