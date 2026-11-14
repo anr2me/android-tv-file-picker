@@ -48,7 +48,10 @@ class StorageDocumentsProvider : DocumentsProvider() {
         val result = MatrixCursor(projection ?: DEFAULT_DOCUMENT_PROJECTION)
         if (isRootId(documentId)) {
             val path = pathOf(documentId)
-            includeRootEntry(result, path, rootCall { RootAccess.stat(ctx, path) })
+            val entry = rootCall { RootAccess.stat(ctx, path) }
+            // Android/data and Android/obb themselves cannot be renamed.
+            val canRename = File(path).parentFile?.let { RootAccess.isRestricted(ctx, it) } == true
+            includeRootEntry(result, path, entry, canRename)
             return result
         }
         val file = Storage.resolve(ctx, documentId)
@@ -68,7 +71,7 @@ class StorageDocumentsProvider : DocumentsProvider() {
             val parentPath = pathOf(parentDocumentId)
             rootCall { RootAccess.list(ctx, parentPath) }
                 .sortedWith(compareBy<RootAccess.Entry>({ !it.isDir }, { it.name.lowercase() }))
-                .forEach { includeRootEntry(result, "$parentPath/${it.name}", it) }
+                .forEach { includeRootEntry(result, "$parentPath/${it.name}", it, true) }
         } else {
             val parent = Storage.resolve(ctx, parentDocumentId)
             if (!parent.isDirectory) throw FileNotFoundException("Not a folder: $parentDocumentId")
@@ -142,7 +145,11 @@ class StorageDocumentsProvider : DocumentsProvider() {
     override fun renameDocument(documentId: String, displayName: String): String {
         val ctx = context ?: throw FileNotFoundException("No context")
         if (isRootId(documentId)) {
-            throw FileNotFoundException("Rename is not supported in protected folders")
+            val path = pathOf(documentId)
+            val newName = rootCall { RootAccess.rename(ctx, path, displayName) }
+            val parentPath = path.substringBeforeLast('/')
+            notifyChildren(RootAccess.ID_PREFIX + parentPath)
+            return RootAccess.ID_PREFIX + parentPath + "/" + newName
         }
         val file = Storage.resolve(ctx, documentId)
         if (Storage.isRoot(ctx, file)) throw FileNotFoundException("Cannot rename a storage root")
@@ -189,7 +196,14 @@ class StorageDocumentsProvider : DocumentsProvider() {
         )
     }
 
-    private fun includeRootEntry(cursor: MatrixCursor, path: String, entry: RootAccess.Entry) {
+    private fun includeRootEntry(
+        cursor: MatrixCursor,
+        path: String,
+        entry: RootAccess.Entry,
+        canRename: Boolean
+    ) {
+        var flags = if (entry.isDir) Document.FLAG_DIR_SUPPORTS_CREATE else Document.FLAG_SUPPORTS_WRITE
+        if (canRename) flags = flags or Document.FLAG_SUPPORTS_RENAME
         cursor.newRow().apply {
             add(Document.COLUMN_DOCUMENT_ID, RootAccess.ID_PREFIX + path)
             add(Document.COLUMN_DISPLAY_NAME, entry.name)
@@ -199,10 +213,7 @@ class StorageDocumentsProvider : DocumentsProvider() {
                 if (entry.isDir) Document.MIME_TYPE_DIR else Storage.mimeOfName(entry.name)
             )
             add(Document.COLUMN_LAST_MODIFIED, entry.modified)
-            add(
-                Document.COLUMN_FLAGS,
-                if (entry.isDir) Document.FLAG_DIR_SUPPORTS_CREATE else Document.FLAG_SUPPORTS_WRITE
-            )
+            add(Document.COLUMN_FLAGS, flags)
         }
     }
 

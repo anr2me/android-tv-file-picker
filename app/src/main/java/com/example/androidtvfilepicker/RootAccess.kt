@@ -159,6 +159,34 @@ object RootAccess {
         return finalName
     }
 
+    // ---- Rename ----
+
+    /**
+     * Renames an item in a protected folder. The item stays in its folder.
+     * Fails if an item with the new name exists. Returns the new name.
+     * The picker does not rename Android/data and Android/obb themselves.
+     */
+    @Throws(IOException::class)
+    fun rename(context: Context, path: String, newName: String): String {
+        if (!isCleanPath(path)) throw FileNotFoundException("Not a protected path: $path")
+        val parentPath = path.substringBeforeLast('/')
+        val oldName = path.substringAfterLast('/')
+        val finalName = Storage.sanitizeName(newName)
+        if (finalName == oldName) return oldName
+
+        // The parent must be in a protected folder. This also rejects Android/data itself.
+        val parent = resolve(context, parentPath)
+        val source = RootShell.quote("$parent/$oldName")
+        val target = RootShell.quote("$parent/$finalName")
+        val script = "if { [ -e $source ] || [ -L $source ]; } && " +
+            "! { [ -e $target ] || [ -L $target ]; }; then " +
+            "mv -n $source $target && { [ -e $target ] || [ -L $target ]; } && echo ok; fi; exit 0"
+        if (RootShell.run(script).none { it.trim() == "ok" }) {
+            throw FileNotFoundException("Cannot rename to: $finalName")
+        }
+        return finalName
+    }
+
     private fun uniqueName(taken: Set<String>, name: String): String {
         if (name !in taken) return name
         val dot = name.lastIndexOf('.')

@@ -129,12 +129,14 @@ Each time you select a file or folder in a protected location, the picker shows 
 - A protected item has a document ID with the prefix `root:`. A grant for a normal folder never includes protected items. For example, a grant for a complete storage volume does not include `Android/data`.
 - A normal folder listing that another app requests does not show `Android/data` and `Android/obb`.
 - The picker supplies new files with the owner, group, and SELinux label of the parent folder.
+- A calling app that has access can rename an item in a protected folder. A rename does not delete data.
 
 ### Limits of root support
 
 - A read can use random access. A read can be slower than a normal read, because the picker uses a `su` process.
 - A write must be in sequence. The modes `w`, `wt`, and `wa` are supported. The mode `rw` is not supported.
-- The picker cannot delete or rename items in protected folders.
+- The picker cannot delete items in protected folders.
+- A rename keeps the item in its folder. A rename fails if an item with the new name exists. The picker does not rename `Android/data` and `Android/obb` themselves.
 - Each action starts a `su` process. A large folder can be slow to open.
 - On some devices, SELinux can deny access to a new file for the app that owns the folder. Do a test with your apps.
 
