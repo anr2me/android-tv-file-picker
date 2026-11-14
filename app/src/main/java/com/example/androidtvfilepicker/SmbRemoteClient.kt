@@ -211,7 +211,8 @@ class SmbRemoteClient(private val share: NetShare) : RemoteClient {
         override fun write(offset: Long, data: ByteArray, dataOffset: Int, length: Int) = smb {
             var done = 0
             while (done < length) {
-                val count = file.write(data, offset + done, dataOffset + done, length - done)
+                // The write method of smbj returns the number of bytes as a Long.
+                val count = file.write(data, offset + done, dataOffset + done, length - done).toInt()
                 if (count <= 0) throw IOException("The server did not accept the data")
                 done += count
             }

@@ -153,15 +153,15 @@ class WebDavRemoteClient(private val share: NetShare) : RemoteClient {
                     "getlastmodified" -> modified = parseDate(parser.nextText().trim())
                 }
             } else if (event == XmlPullParser.END_TAG && parser.name == "response") {
-                href?.let { value ->
+                val value = href
+                if (value != null) {
                     val decoded = Uri.parse(value).path ?: value
                     val trimmed = decoded.trimEnd('/')
                     val name = trimmed.substringAfterLast('/')
                     val isSelf = selfPath != null && trimmed == selfPath.trimEnd('/')
-                    if (name.isNotEmpty() && !isSelf) {
-                        result.add(RemoteEntry(name, isDir || decoded.endsWith("/"), size, modified))
-                    } else if (selfPath == null) {
-                        // A stat request: keep the data of the item itself.
+                    // A stat request has no selfPath. It keeps the data of the item itself.
+                    val keep = selfPath == null || (name.isNotEmpty() && !isSelf)
+                    if (keep) {
                         result.add(RemoteEntry(name, isDir || decoded.endsWith("/"), size, modified))
                     }
                 }
