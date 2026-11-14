@@ -279,6 +279,8 @@ The run also has the artifact `Android-TV-File-Picker-mapping`. Keep this file f
 | `publish_release` | If on, the workflow publishes the APK as a GitHub release. |
 | `release_tag` | Tag of the release, for example `v1.0.1`. If empty, the workflow uses `v` and the version name. |
 
+The workflow builds the branch that you select in the **Run workflow** menu. A new tag points to the commit that the workflow built, and the release notes show the commits of that branch. If the tag exists and points to a different commit, the workflow stops. Use a new tag, or delete the old tag.
+
 The version code is the run number of the workflow.
 
 ### Sign the APK

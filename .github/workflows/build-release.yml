@@ -98,6 +98,12 @@ jobs:
             echo "::error::Set release_tag or version_name to publish a release."
             exit 1
           fi
+          # An old tag keeps its commit. A release with this tag would show the wrong commits.
+          EXISTING=$(git ls-remote --tags origin "refs/tags/$TAG" "refs/tags/$TAG^{}" | awk '{print $1}' | tail -n 1)
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "$GITHUB_SHA" ]; then
+            echo "::error::The tag $TAG exists and points to $EXISTING. The job built $GITHUB_SHA. Use a new tag, or delete the old tag."
+            exit 1
+          fi
           echo "RELEASE_TAG_FINAL=$TAG" >> "$GITHUB_ENV"
 
       - name: Publish the release
@@ -105,6 +111,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG_FINAL }}
+          # Create a new tag at the commit that the job built, not at the head of the default branch.
+          target_commitish: ${{ github.sha }}
           files: ${{ env.APK_PATH }}
           generate_release_notes: true
 
