@@ -281,6 +281,8 @@ The run also has the artifact `Android-TV-File-Picker-mapping`. Keep this file f
 
 The workflow builds the branch that you select in the **Run workflow** menu. A new tag points to the commit that the workflow built, and the release notes show the commits of that branch. If the tag exists and points to a different commit, the workflow stops. Use a new tag, or delete the old tag.
 
+If you build a branch that is not the default branch, the workflow marks the release as a pre-release. A build of the default branch is a normal release.
+
 The version code is the run number of the workflow.
 
 ### Sign the APK
