@@ -35,10 +35,10 @@ android {
 
     buildTypes {
         release {
-            // The SMB library (smbj) and its dependencies use reflection.
-            // The build does not shrink the code, so the release build is safe.
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 shrinks the code and the resources. The rules in proguard-rules.pro
+            // keep the classes that the libraries for the network shares load by name.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

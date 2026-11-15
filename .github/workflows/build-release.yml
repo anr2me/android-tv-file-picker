@@ -77,6 +77,13 @@ jobs:
           path: ${{ env.APK_PATH }}
           if-no-files-found: error
 
+      - name: Upload the mapping file
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-TV-File-Picker-mapping
+          path: app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: warn
+
       - name: Find the release tag
         if: ${{ inputs.publish_release }}
         env:
@@ -91,6 +98,12 @@ jobs:
             echo "::error::Set release_tag or version_name to publish a release."
             exit 1
           fi
+          # An old tag keeps its commit. A release with this tag would show the wrong commits.
+          EXISTING=$(git ls-remote --tags origin "refs/tags/$TAG" "refs/tags/$TAG^{}" | awk '{print $1}' | tail -n 1)
+          if [ -n "$EXISTING" ] && [ "$EXISTING" != "$GITHUB_SHA" ]; then
+            echo "::error::The tag $TAG exists and points to $EXISTING. The job built $GITHUB_SHA. Use a new tag, or delete the old tag."
+            exit 1
+          fi
           echo "RELEASE_TAG_FINAL=$TAG" >> "$GITHUB_ENV"
 
       - name: Publish the release
@@ -98,5 +111,19 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.RELEASE_TAG_FINAL }}
+          # Create a new tag at the commit that the job built, not at the head of the default branch.
+          target_commitish: ${{ github.sha }}
+          # A build of a branch that is not the default branch is a pre-release.
+          prerelease: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
           files: ${{ env.APK_PATH }}
           generate_release_notes: true
+
+      - name: Upload the R8 files (if the job failed)
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-TV-File-Picker-r8-suggestions
+          path: |
+            app/build/outputs/mapping/release/missing_rules.txt
+            app/build/outputs/mapping/release/configuration.txt
+          if-no-files-found: ignore

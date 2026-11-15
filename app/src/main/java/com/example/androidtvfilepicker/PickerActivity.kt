@@ -420,14 +420,23 @@ class PickerActivity : Activity() {
     private fun deliver(uris: List<Uri>) {
         if (uris.isEmpty()) return
 
-        val requested = intent.flags and (
-            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+        // The flags of the result follow the system picker (DocumentsUI):
+        // - OPEN_DOCUMENT, OPEN_DOCUMENT_TREE, and CREATE_DOCUMENT: a persistable grant with
+        //   read and write access, also if the app did not ask for it. Many apps call
+        //   takePersistableUriPermission without a flag in the request.
+        // - OPEN_DOCUMENT_TREE: a prefix grant. The grant is then valid for each URI below the
+        //   folder, for example ".../tree/<id>/document/<id>/children". Without the prefix flag,
+        //   the grant is valid only for the URI of the folder, and the app cannot read the files.
+        // - GET_CONTENT: a temporary grant with read access. Write access only if the app asked.
+        var flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+        if (intent.action == Intent.ACTION_GET_CONTENT) {
+            flags = flags or (intent.flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        } else {
+            flags = flags or
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
-                Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
-            )
-        var flags = requested or Intent.FLAG_GRANT_READ_URI_PERMISSION
-        if (mode != Mode.OPEN) flags = flags or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+            if (mode == Mode.TREE) flags = flags or Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
+        }
 
         val result = Intent()
         result.addFlags(flags)

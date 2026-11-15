@@ -31,6 +31,8 @@ The picker handles these intents.
 
 The picker supports these extras: `EXTRA_ALLOW_MULTIPLE`, `EXTRA_MIME_TYPES`, and `EXTRA_TITLE`. It also supports MIME type filters in the intent type.
 
+The grants that the picker returns are the same as the grants of the system picker. For `ACTION_OPEN_DOCUMENT`, `ACTION_CREATE_DOCUMENT`, and `ACTION_OPEN_DOCUMENT_TREE`, the grant is persistable and has read and write access. For `ACTION_OPEN_DOCUMENT_TREE`, the grant is also valid for all items in the folder. For `ACTION_GET_CONTENT`, the grant is temporary and has read access.
+
 ## How the app works
 
 1. The app finds each mounted storage volume with `StorageManager`. This includes USB drives.
@@ -231,6 +233,31 @@ This repository does not include the Gradle wrapper files.
 
 If you do not set a release key, the build signs the APK with the debug key.
 
+## Shrink the code (R8)
+
+The release build uses R8 to remove unused code and unused resources. The libraries for the network shares (smbj and BouncyCastle) load some classes by name. R8 cannot see these uses. The rules in `app/proguard-rules.pro` keep these classes.
+
+A problem with R8 does not show at build time. It shows when the app uses the feature. After each change to the libraries or to the rules, do these tests with the release APK on a device:
+
+1. Open an SMB share. Open a folder, read a file, and write a file.
+2. Open a WebDAV share. Open a folder and read a file.
+3. If you use root support, open a protected folder.
+
+### If the build fails with "Missing classes"
+
+1. Get the file `missing_rules.txt`. In GitHub Actions, the workflow uploads it as the artifact `Android-TV-File-Picker-r8-suggestions` if the job fails. On your computer, the file is in `app/build/outputs/mapping/release/`.
+2. Copy the lines from the file into `app/proguard-rules.pro`.
+3. Build again.
+
+### If the release APK crashes, and the debug APK does not
+
+1. Get the stack trace with `adb logcat`.
+2. Decode the stack trace with the file `mapping.txt` and the `retrace` tool. The workflow uploads the file as the artifact `Android-TV-File-Picker-mapping`.
+3. Add a `-keep` rule for the class that the stack trace names.
+4. Build again and do the tests.
+
+To find out if R8 causes a problem, set `isMinifyEnabled` and `isShrinkResources` to `false` in `app/build.gradle.kts`. Then build again.
+
 ## Build with GitHub Actions
 
 The workflow `.github/workflows/build-release.yml` builds the release APK on demand. It does not run automatically.
@@ -244,6 +271,8 @@ The workflow `.github/workflows/build-release.yml` builds the release APK on dem
 7. When the job ends, open the run summary.
 8. Download the artifact `Android-TV-File-Picker-apk`.
 
+The run also has the artifact `Android-TV-File-Picker-mapping`. Keep this file for each APK that you give to other people. You need it to read crash reports. Refer to [Shrink the code (R8)](#shrink-the-code-r8).
+
 ### Workflow inputs
 
 | Input | Description |
@@ -251,6 +280,10 @@ The workflow `.github/workflows/build-release.yml` builds the release APK on dem
 | `version_name` | Version name of the APK, for example `1.0.1`. If empty, the build uses the default in `app/build.gradle.kts`. |
 | `publish_release` | If on, the workflow publishes the APK as a GitHub release. |
 | `release_tag` | Tag of the release, for example `v1.0.1`. If empty, the workflow uses `v` and the version name. |
+
+The workflow builds the branch that you select in the **Run workflow** menu. A new tag points to the commit that the workflow built, and the release notes show the commits of that branch. If the tag exists and points to a different commit, the workflow stops. Use a new tag, or delete the old tag.
+
+If you build a branch that is not the default branch, the workflow marks the release as a pre-release. A build of the default branch is a normal release.
 
 The version code is the run number of the workflow.
 
@@ -294,6 +327,7 @@ The default package name is `com.example.androidtvfilepicker`. To change it:
 ├── .github/workflows/build-release.yml   Workflow for the release APK
 ├── app/
 │   ├── build.gradle.kts                  App build configuration
+│   ├── proguard-rules.pro                R8 rules for the libraries
 │   └── src/main/
 │       ├── AndroidManifest.xml           Intent filters and provider
 │       ├── java/.../MainActivity.kt      Start screen and test buttons
@@ -321,7 +355,7 @@ The default package name is `com.example.androidtvfilepicker`. To change it:
 
 - Android 11 and newer blocks access to the `Android/data` and `Android/obb` folders. The picker cannot open these folders, also with All files access. On a rooted device, you can turn on [root support](#root-support-optional).
 - The app supports local storage, SMB shares, and WebDAV shares. It does not support cloud storage, NFS, FTP, or SFTP.
-- The release build does not shrink the code. The libraries for the network shares use reflection. The APK is therefore larger.
+- The release build shrinks the code with R8. If a feature fails only in the release APK, refer to [Shrink the code (R8)](#shrink-the-code-r8).
 - The banner on the home screen is a plain image. Replace `res/drawable/banner.xml` with your own banner (320 x 180 pixels).
 
 ## Troubleshooting
