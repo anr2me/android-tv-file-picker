@@ -31,6 +31,8 @@ The picker handles these intents.
 
 The picker supports these extras: `EXTRA_ALLOW_MULTIPLE`, `EXTRA_MIME_TYPES`, and `EXTRA_TITLE`. It also supports MIME type filters in the intent type.
 
+The grants that the picker returns are the same as the grants of the system picker. For `ACTION_OPEN_DOCUMENT`, `ACTION_CREATE_DOCUMENT`, and `ACTION_OPEN_DOCUMENT_TREE`, the grant is persistable and has read and write access. For `ACTION_OPEN_DOCUMENT_TREE`, the grant is also valid for all items in the folder. For `ACTION_GET_CONTENT`, the grant is temporary and has read access.
+
 ## How the app works
 
 1. The app finds each mounted storage volume with `StorageManager`. This includes USB drives.
