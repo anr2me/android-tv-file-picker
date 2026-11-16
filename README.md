@@ -230,6 +230,8 @@ The app does not send the log to a network. The log can include server names. Re
 | `Shares onDestroy finishing=false` | Android destroyed the screen. |
 | `App onTrimMemory level=...` | Android asked the app to use less memory. |
 | `CRASH in ...` | An error stopped the app. |
+| `IGNORED error in library thread ...` | A thread of a library (SMB, HTTP) ended with an error. The app did not stop. The text shows the error and the first line of its stack. |
+| `Test pressed: build N ms, draft N ms` | The time that the main thread used for the form and for the storage of the values. A large value (more than 1000 ms) shows a slow Keystore or storage. |
 
 ## Test the picker
 

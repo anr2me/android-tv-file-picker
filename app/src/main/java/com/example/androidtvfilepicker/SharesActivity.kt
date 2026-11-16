@@ -3,6 +3,7 @@ package com.example.androidtvfilepicker
 import android.app.Activity
 import android.app.AlertDialog
 import android.os.Bundle
+import android.os.SystemClock
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
@@ -217,10 +218,16 @@ class SharesActivity : Activity() {
                 }
             }
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
-                build()?.let {
+                // The times show if the Keystore or the storage blocks the main thread.
+                val t0 = SystemClock.elapsedRealtime()
+                val share = build()
+                val t1 = SystemClock.elapsedRealtime()
+                if (share != null) {
                     // Keep the values first. A failed test must not cost the user the input.
-                    Shares.saveDraft(this, it)
-                    test(it)
+                    Shares.saveDraft(this, share)
+                    val t2 = SystemClock.elapsedRealtime()
+                    EventLog.add(this, "Test pressed: build ${t1 - t0} ms, draft ${t2 - t1} ms")
+                    test(share)
                 }
             }
         }

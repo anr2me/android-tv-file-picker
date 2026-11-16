@@ -45,7 +45,7 @@
              would close and the user would lose the input. -->
         <activity
             android:name=".SharesActivity"
-            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|layoutDirection|locale"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|layoutDirection|locale|colorMode|touchscreen|mcc|mnc"
             android:exported="false" />
 
         <!-- The picker. It handles the Storage Access Framework (SAF) intents. -->
