@@ -84,6 +84,32 @@ object Shares {
         NetClients.invalidate(id)
     }
 
+    // ---- Draft ----
+    // The editor keeps the values of its form when the user selects Test. If the app closes
+    // during the test, the user does not need to type the values again.
+
+    private const val DRAFT_KEY = "net_share_draft"
+
+    fun saveDraft(context: Context, share: NetShare) {
+        // commit() writes at once. apply() can lose the data if the app closes now.
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit().putString(DRAFT_KEY, toJson(share).toString()).commit()
+    }
+
+    fun loadDraft(context: Context): NetShare? {
+        val text = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(DRAFT_KEY, null) ?: return null
+        return try {
+            fromJson(JSONObject(text))
+        } catch (e: JSONException) {
+            null
+        }
+    }
+
+    fun clearDraft(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(DRAFT_KEY).apply()
+    }
+
     private fun write(context: Context, shares: List<NetShare>) {
         val array = JSONArray()
         shares.forEach { array.put(toJson(it)) }

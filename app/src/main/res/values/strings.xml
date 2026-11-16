@@ -85,6 +85,7 @@
     <string name="share_share_empty">Enter the share name.</string>
     <string name="share_url_invalid">Enter a URL that starts with http:// or https://.</string>
     <string name="share_encrypt_failed">The app cannot store the password on this device.</string>
+    <string name="share_draft_restored">The values of your last input are back.</string>
     <string name="share_testing">Testing the connection…</string>
     <string name="share_test_ok">The connection works.</string>
     <string name="share_test_failed">The connection failed: %1$s</string>

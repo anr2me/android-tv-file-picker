@@ -89,20 +89,32 @@ class SharesActivity : Activity() {
             if (existing != null) R.string.share_password_keep_hint else R.string.share_password_hint
         )
 
-        if (existing != null) {
-            nameField.setText(existing.name)
-            addressField.setText(existing.address)
-            shareField.setText(existing.shareName)
-            folderField.setText(existing.basePath)
-            userField.setText(existing.username)
-            domainField.setText(existing.domain)
-            readOnlyCheck.isChecked = existing.readOnly
-            trustAllCheck.isChecked = existing.trustAllCerts
-            deleteButton.visibility = View.VISIBLE
+        // The values of the last test. They are still here if the app closed during the test.
+        val draft = Shares.loadDraft(this)?.takeIf {
+            it.type == type &&
+                if (existing != null) it.id == existing.id else Shares.get(this, it.id) == null
+        }
+        val source = draft ?: existing
+        if (source != null) {
+            nameField.setText(source.name)
+            addressField.setText(source.address)
+            shareField.setText(source.shareName)
+            folderField.setText(source.basePath)
+            userField.setText(source.username)
+            domainField.setText(source.domain)
+            readOnlyCheck.isChecked = source.readOnly
+            trustAllCheck.isChecked = source.trustAllCerts
         } else {
             // A new share is read-only until the user changes this.
             readOnlyCheck.isChecked = true
         }
+        if (draft != null) {
+            if (draft.password.isNotEmpty()) passwordField.setText(draft.password)
+            Toast.makeText(this, R.string.share_draft_restored, Toast.LENGTH_SHORT).show()
+        }
+        if (existing != null) deleteButton.visibility = View.VISIBLE
+        // A new share keeps the same ID for each test and for the save.
+        val formId = existing?.id ?: draft?.id ?: Shares.newId()
 
         fun updateWarning() {
             val http = !smb && addressField.text.toString().trim().startsWith("http://", ignoreCase = true)
@@ -138,7 +150,7 @@ class SharesActivity : Activity() {
                 return null
             }
             return NetShare(
-                id = existing?.id ?: Shares.newId(),
+                id = formId,
                 type = type,
                 name = nameField.text.toString().trim().ifEmpty { address },
                 address = address,
@@ -175,9 +187,16 @@ class SharesActivity : Activity() {
                 }
             }
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
-                build()?.let { test(it) }
+                build()?.let {
+                    // Keep the values first. A failed test must not cost the user the input.
+                    Shares.saveDraft(this, it)
+                    test(it)
+                }
             }
         }
+
+        // The user closed the form (save, cancel, or delete). The values are not necessary now.
+        dialog.setOnDismissListener { Shares.clearDraft(this) }
 
         deleteButton.setOnClickListener {
             AlertDialog.Builder(this)

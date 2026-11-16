@@ -139,6 +139,10 @@ object NetAccess {
             } catch (e: RuntimeException) {
                 NetClients.invalidate(shareId)
                 throw IOException(e.message ?: e.javaClass.simpleName, e)
+            } catch (e: LinkageError) {
+                // A class of a library is missing or does not match. Do not stop the app.
+                NetClients.invalidate(shareId)
+                throw IOException(describe(e), e)
             }
         }
     }
@@ -147,14 +151,29 @@ object NetAccess {
         if (share.readOnly) throw FileNotFoundException("This share is read-only")
     }
 
-    /** Tests a share. Returns null if it works, or the text of the error. */
+    /**
+     * Tests a share. Returns null if it works, or the text of the error.
+     * This function also catches the errors of the libraries (for example NoClassDefFoundError).
+     * An uncaught error would stop the app.
+     */
     fun test(share: NetShare): String? =
         try {
             NetClients.create(share).use { it.list("/") }
             null
-        } catch (e: Exception) {
-            e.message ?: e.javaClass.simpleName
+        } catch (e: Throwable) {
+            describe(e)
         }
+
+    /** Makes the text of an error. It includes the name of the error and of the first cause. */
+    private fun describe(e: Throwable): String {
+        val first = if (e is Exception && !e.message.isNullOrEmpty()) {
+            e.message.orEmpty()
+        } else {
+            e.javaClass.simpleName + (e.message?.let { ": $it" } ?: "")
+        }
+        val cause = generateSequence(e) { it.cause }.last()
+        return if (cause !== e) "$first [${cause.javaClass.simpleName}: ${cause.message}]" else first
+    }
 
     // ---- Information ----
 

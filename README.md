@@ -182,6 +182,8 @@ The picker can open files on a network share. A calling app then gets access to 
 
 To change or delete a share, select it in the list.
 
+When you select **Test**, the app keeps the values of the form until you close the form. If the app closes during a test, the next form for the same share shows the values again.
+
 ### Use a share
 
 The picker shows each share after the storage volumes in the top-level list. Select the share. Then select a folder or a file. The calling app gets access to the item, and not to the rest of the share.
@@ -372,6 +374,7 @@ The default package name is `com.example.androidtvfilepicker`. To change it:
 | The test of an SMB share shows a connection error | The server is off, the address is not correct, or a firewall blocks port 445 | Examine the address and the network. The server must support SMB 2 or SMB 3. |
 | The test of a WebDAV share shows `Access denied (HTTP 401)` | The password is not correct, or the server needs Digest authentication | Correct the password. Change the server to Basic authentication over HTTPS. |
 | The test of a WebDAV share shows a certificate error | The server uses a certificate that Android does not trust | Install a trusted certificate on the server. Or turn on **Trust all certificates** for a network that you trust. |
+| The test shows a library error, for example `NoClassDefFoundError` | R8 removed a class that the library needs, or the library does not work on this device | Refer to [Shrink the code (R8)](#shrink-the-code-r8). Add a keep rule for the class in the message. To find out if R8 is the cause, turn R8 off. |
 | A calling app cannot play or open a file from a share | The app needs a file path, or the WebDAV server does not support range requests | Use an app that supports SAF. Turn on range requests on the server. |
 | The picker shows `Android protects this folder` | Root support is off | Turn on [root support](#root-support-optional). |
 | Root support does not turn on | The device has no root, or the root manager denied the app | Give root permission to the app in the root manager. Then try again. |
