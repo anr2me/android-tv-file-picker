@@ -5,6 +5,8 @@ import android.app.AlertDialog
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -47,7 +49,35 @@ class SharesActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        EventLog.add(this, "Shares onResume")
         refresh()
+    }
+
+    // ---- Diagnostic log ----
+    // These events show how the screen ends: does the app close the screen (finish),
+    // does the system destroy it, or does the process end without an event?
+
+    override fun onStop() {
+        EventLog.add(this, "Shares onStop")
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        EventLog.add(this, "Shares onDestroy finishing=$isFinishing configChange=$isChangingConfigurations")
+        super.onDestroy()
+    }
+
+    override fun finish() {
+        // The first lines of the stack show who closes the screen.
+        val caller = Log.getStackTraceString(Throwable()).lines().drop(2).take(5)
+            .joinToString(" | ") { it.trim() }
+        EventLog.add(this, "Shares finish() from $caller")
+        super.finish()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        EventLog.add(this, "Shares window focus=$hasFocus")
     }
 
     private fun refresh() {
@@ -196,7 +226,16 @@ class SharesActivity : Activity() {
         }
 
         // The user closed the form (save, cancel, or delete). The values are not necessary now.
-        dialog.setOnDismissListener { Shares.clearDraft(this) }
+        dialog.setOnDismissListener {
+            EventLog.add(this, "Form dismissed")
+            Shares.clearDraft(this)
+        }
+        dialog.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == KeyEvent.KEYCODE_BACK && event.action == KeyEvent.ACTION_DOWN) {
+                EventLog.add(this, "Form BACK key")
+            }
+            false
+        }
 
         deleteButton.setOnClickListener {
             AlertDialog.Builder(this)
@@ -215,8 +254,10 @@ class SharesActivity : Activity() {
 
     private fun test(share: NetShare) {
         Toast.makeText(this, R.string.share_testing, Toast.LENGTH_SHORT).show()
+        EventLog.add(this, "Test start type=${share.type}")
         Thread {
             val error = NetAccess.test(share)
+            EventLog.add(this, "Test end: ${error ?: "ok"}")
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
                 val message = if (error == null) {

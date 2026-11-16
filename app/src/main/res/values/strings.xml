@@ -85,6 +85,12 @@
     <string name="share_share_empty">Enter the share name.</string>
     <string name="share_url_invalid">Enter a URL that starts with http:// or https://.</string>
     <string name="share_encrypt_failed">The app cannot store the password on this device.</string>
+    <string name="log_button">Diagnostic log</string>
+    <string name="log_title">Diagnostic log</string>
+    <string name="log_close">Close</string>
+    <string name="log_clear">Clear</string>
+    <string name="log_empty">The log is empty.</string>
+    <string name="crash_keep">Keep</string>
     <string name="crash_title">The app closed after this error:</string>
     <string name="crash_clear">Delete the error report</string>
     <string name="share_draft_restored">The values of your last input are back.</string>

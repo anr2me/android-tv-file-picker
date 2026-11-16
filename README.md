@@ -215,6 +215,22 @@ The app does not send the report to a network. The text can include names of ser
 
 If the app returns to the start screen and there is no error report, Android stopped the app. For example, the device had no free memory.
 
+## Diagnostic log
+
+The app keeps a short log of events. The log has the last 80 lines. It shows when the app starts, when the screens open and close, and when a test of a share starts and ends. It also shows the warnings of Android about low memory, and the error that stopped the app.
+
+To read the log, start the app and select **Diagnostic log**. The log shows the oldest line at the top and the newest line at the bottom. The screen starts at the bottom. Use the D-pad to scroll. Select **Clear** to delete the log.
+
+The app does not send the log to a network. The log can include server names. Read the log before you share it.
+
+| Line | Meaning |
+|------|---------|
+| `App start` | A new process of the app started. If this line shows after a screen closed with no other event, Android stopped the process. |
+| `Shares finish() from ...` | The app closed the screen. The text shows the code that did it. |
+| `Shares onDestroy finishing=false` | Android destroyed the screen. |
+| `App onTrimMemory level=...` | Android asked the app to use less memory. |
+| `CRASH in ...` | An error stopped the app. |
+
 ## Test the picker
 
 The start screen has two test buttons: **Test: pick a file** and **Test: pick a folder**. Each button starts the picker and shows the URI that the picker returns.
@@ -356,6 +372,7 @@ The default package name is `com.example.androidtvfilepicker`. To change it:
 │       ├── java/.../SharesActivity.kt    The screen for the shares
 │       ├── java/.../App.kt               The application class. It starts the error report.
 │       ├── java/.../CrashLog.kt          Saves the text of the last error
+│       ├── java/.../EventLog.kt          The short log of events
 │       ├── java/.../StorageDocumentsProvider.kt   The document provider
 │       └── res/                          Layouts, strings, icons
 ├── build.gradle.kts

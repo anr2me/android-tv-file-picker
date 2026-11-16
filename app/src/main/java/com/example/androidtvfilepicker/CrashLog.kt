@@ -13,10 +13,15 @@ object CrashLog {
 
     private const val FILE_NAME = "last_error.txt"
 
+    /** True if the start screen already showed the report in this process. */
+    @Volatile
+    var shown = false
+
     fun install(context: Context) {
         val app = context.applicationContext
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            EventLog.add(app, "CRASH in ${thread.name}: ${error.javaClass.name}: ${error.message}")
             try {
                 val text = "${Date()}\nThread: ${thread.name}\n" + Log.getStackTraceString(error)
                 File(app.filesDir, FILE_NAME).writeText(text)
