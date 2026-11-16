@@ -17,6 +17,9 @@ class MainActivity : Activity() {
     private lateinit var adbHint: TextView
     private lateinit var testFile: Button
     private lateinit var rootToggle: Button
+    private lateinit var crashTitle: TextView
+    private lateinit var crashText: TextView
+    private lateinit var crashClear: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,6 +31,13 @@ class MainActivity : Activity() {
         adbHint = findViewById(R.id.adbHint)
         testFile = findViewById(R.id.testFile)
         rootToggle = findViewById(R.id.rootToggle)
+        crashTitle = findViewById(R.id.crashTitle)
+        crashText = findViewById(R.id.crashText)
+        crashClear = findViewById(R.id.crashClear)
+        crashClear.setOnClickListener {
+            CrashLog.clear(this)
+            refreshCrashReport()
+        }
 
         adbHint.text = getString(R.string.permission_adb, packageName)
         grant.setOnClickListener { Storage.openAllFilesSettings(this) }
@@ -62,7 +72,18 @@ class MainActivity : Activity() {
         grant.visibility = if (allowed) View.GONE else View.VISIBLE
         adbHint.visibility = if (allowed) View.GONE else View.VISIBLE
         refreshRootButton()
+        refreshCrashReport()
         if (allowed) testFile.requestFocus() else grant.requestFocus()
+    }
+
+    /** Shows the first lines of the last error, if the app closed after an error. */
+    private fun refreshCrashReport() {
+        val report = CrashLog.read(this)
+        val visibility = if (report == null) View.GONE else View.VISIBLE
+        crashTitle.visibility = visibility
+        crashText.visibility = visibility
+        crashClear.visibility = visibility
+        if (report != null) crashText.text = report.lines().take(14).joinToString("\n")
     }
 
     private fun refreshRootButton() {

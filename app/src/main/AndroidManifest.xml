@@ -15,6 +15,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
+        android:name=".App"
         android:allowBackup="false"
         android:usesCleartextTraffic="true"
         android:icon="@mipmap/ic_launcher"
@@ -39,8 +40,12 @@
         </activity>
 
         <!-- The screen for the network shares. -->
+        <!-- The form of a share has text fields. The on-screen keyboard can change the
+             configuration of the device. The screen must not restart, because the form
+             would close and the user would lose the input. -->
         <activity
             android:name=".SharesActivity"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density|fontScale|layoutDirection|locale"
             android:exported="false" />
 
         <!-- The picker. It handles the Storage Access Framework (SAF) intents. -->

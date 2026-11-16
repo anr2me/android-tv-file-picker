@@ -91,5 +91,32 @@
         android:gravity="center"
         android:textColor="@color/text_secondary"
         android:textSize="14sp" />
+    <TextView
+        android:id="@+id/crashTitle"
+        android:layout_width="720dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:text="@string/crash_title"
+        android:textColor="#FFFFB74D"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/crashText"
+        android:layout_width="720dp"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_secondary"
+        android:textSize="11sp"
+        android:typeface="monospace"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/crashClear"
+        android:layout_width="320dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/crash_clear"
+        android:visibility="gone" />
 </LinearLayout>
 </ScrollView>

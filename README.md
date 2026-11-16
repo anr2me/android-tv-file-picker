@@ -207,6 +207,14 @@ The picker shows each share after the storage volumes in the top-level list. Sel
 - The app does not find servers automatically. It does not support NFS, FTP, or SFTP.
 - The app keeps the connection of a share open. If the server closes the connection, the app connects again.
 
+## Error report
+
+If an error stops the app, the app saves the text of the error. The start screen shows the first lines of the text. Select **Delete the error report** to remove it.
+
+The app does not send the report to a network. The text can include names of servers, folders, and files. Read the text before you share it.
+
+If the app returns to the start screen and there is no error report, Android stopped the app. For example, the device had no free memory.
+
 ## Test the picker
 
 The start screen has two test buttons: **Test: pick a file** and **Test: pick a folder**. Each button starts the picker and shows the URI that the picker returns.
@@ -346,6 +354,8 @@ The default package name is `com.example.androidtvfilepicker`. To change it:
 │       ├── java/.../Shares.kt            The list of shares
 │       ├── java/.../Secret.kt            Password encryption (Android Keystore)
 │       ├── java/.../SharesActivity.kt    The screen for the shares
+│       ├── java/.../App.kt               The application class. It starts the error report.
+│       ├── java/.../CrashLog.kt          Saves the text of the last error
 │       ├── java/.../StorageDocumentsProvider.kt   The document provider
 │       └── res/                          Layouts, strings, icons
 ├── build.gradle.kts
@@ -375,6 +385,7 @@ The default package name is `com.example.androidtvfilepicker`. To change it:
 | The test of a WebDAV share shows `Access denied (HTTP 401)` | The password is not correct, or the server needs Digest authentication | Correct the password. Change the server to Basic authentication over HTTPS. |
 | The test of a WebDAV share shows a certificate error | The server uses a certificate that Android does not trust | Install a trusted certificate on the server. Or turn on **Trust all certificates** for a network that you trust. |
 | The test shows a library error, for example `NoClassDefFoundError` | R8 removed a class that the library needs, or the library does not work on this device | Refer to [Shrink the code (R8)](#shrink-the-code-r8). Add a keep rule for the class in the message. To find out if R8 is the cause, turn R8 off. |
+| The app returns to the start screen when you use the form of a share | An error stopped the app, or Android stopped the app | Look at the error report on the start screen. If there is no report, Android stopped the app. |
 | A calling app cannot play or open a file from a share | The app needs a file path, or the WebDAV server does not support range requests | Use an app that supports SAF. Turn on range requests on the server. |
 | The picker shows `Android protects this folder` | Root support is off | Turn on [root support](#root-support-optional). |
 | Root support does not turn on | The device has no root, or the root manager denied the app | Give root permission to the app in the root manager. Then try again. |
