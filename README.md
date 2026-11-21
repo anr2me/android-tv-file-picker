@@ -109,6 +109,8 @@ The picker and the **Network shares** screen change their layout when the screen
 | Landscape | On the left side of the screen | On the right side of the screen |
 | Portrait | At the top of the screen | Below the buttons |
 
+The start screen has one column in each orientation. In portrait orientation, the text and the buttons use the full width of the screen.
+
 The picker keeps the folder that is open when the screen turns. It does not keep the selected files. Turn the screen before you select the files.
 
 ## Root support (optional)
