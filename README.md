@@ -87,9 +87,10 @@ adb shell appops set com.example.androidtvfilepicker MANAGE_EXTERNAL_STORAGE all
 | Up, Down | Move in the list |
 | Select (OK) | Open a folder, or select a file |
 | Back | Go up one folder. At the top level, cancel the picker |
-| Left | Move to the buttons on the left side |
+| Left | Move to the buttons (landscape orientation) |
+| Up | At the first item in the list, move to the buttons (portrait orientation) |
 
-In each mode, the buttons on the left side do these actions:
+In each mode, the buttons do these actions:
 
 | Mode | Button | Action |
 |------|--------|--------|
@@ -98,6 +99,17 @@ In each mode, the buttons on the left side do these actions:
 | Save a file | **Save here** | Create the file with the name in the text field |
 
 If a file with the same name exists, the picker adds a number to the new name. For example, `report (1).pdf`.
+
+### Screen orientation
+
+The picker changes its layout when the screen turns.
+
+| Orientation | Position of the buttons | Position of the list |
+|-------------|-------------------------|----------------------|
+| Landscape | On the left side of the screen | On the right side of the screen |
+| Portrait | At the top of the screen | Below the buttons |
+
+The picker keeps the folder that is open when the screen turns. It does not keep the selected files. Turn the screen before you select the files.
 
 ## Root support (optional)
 
