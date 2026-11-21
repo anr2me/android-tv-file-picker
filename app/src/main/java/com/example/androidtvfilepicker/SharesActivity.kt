@@ -2,6 +2,7 @@ package com.example.androidtvfilepicker
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.res.Configuration
 import android.os.Bundle
 import android.os.SystemClock
 import android.text.Editable
@@ -29,15 +30,26 @@ class SharesActivity : Activity() {
     private lateinit var emptyView: TextView
     private lateinit var addSmb: Button
 
+    /** The orientation of the layout that is on screen. */
+    private var orientation = Configuration.ORIENTATION_UNDEFINED
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        adapter = ShareAdapter { showEditor(it, it.type) }
+        bindContent()
+    }
+
+    /** Inflates the layout for the orientation of the screen. Then connects the views. */
+    private fun bindContent() {
+        // If the layout is inflated again, the old list must release the adapter.
+        if (::list.isInitialized) list.adapter = null
         setContentView(R.layout.activity_shares)
+        orientation = resources.configuration.orientation
 
         list = findViewById(R.id.list)
         emptyView = findViewById(R.id.empty)
         addSmb = findViewById(R.id.addSmb)
 
-        adapter = ShareAdapter { showEditor(it, it.type) }
         list.layoutManager = LinearLayoutManager(this)
         list.adapter = adapter
 
@@ -46,6 +58,20 @@ class SharesActivity : Activity() {
             showEditor(null, NetShare.Type.WEBDAV)
         }
         findViewById<Button>(R.id.back).setOnClickListener { finish() }
+    }
+
+    /**
+     * The manifest handles the configuration changes of this screen, so Android does not
+     * restart the screen when it turns. Inflate the layout again, to get the portrait or
+     * the landscape layout.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (newConfig.orientation != orientation) {
+            EventLog.add(this, "Shares orientation changed: ${newConfig.orientation}")
+            bindContent()
+            refresh()
+        }
     }
 
     override fun onResume() {

@@ -102,7 +102,7 @@ If a file with the same name exists, the picker adds a number to the new name. F
 
 ### Screen orientation
 
-The picker changes its layout when the screen turns.
+The picker and the **Network shares** screen change their layout when the screen turns.
 
 | Orientation | Position of the buttons | Position of the list |
 |-------------|-------------------------|----------------------|
